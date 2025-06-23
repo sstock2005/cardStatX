@@ -1,0 +1,5 @@
+constants.py
+logs/
+data/
+.venv/
+__pycache__/
