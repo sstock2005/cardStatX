@@ -72,7 +72,7 @@ def filter(data):
         try:
             condition = item['condition'] + ':' + item['conditionId']
         except KeyError as ke:
-            condition = item['condition'] + ':NA'
+            continue  # skip items without condition information
             
         # TODO add more filtering here
         # item['Set']

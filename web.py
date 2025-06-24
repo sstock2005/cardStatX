@@ -31,23 +31,13 @@ def api_list():
 def api_stats_average(card: str):
     averages = get_card_averages(card)
     
-    return averages
+    if averages is None:
+        return {"error": "Card not found"}, 404
 
+    else:
+        return averages
 if __name__ == '__main__':
     setup_logging()
     logger = logging.getLogger('web')
-    
-    ingestor_thread = threading.Thread(target=iterate_task, daemon=False)
-    ingestor_thread.start()
-    
-    def _shutdown(signum, frame):
-        logger.info("Shutting down background thread…")
-        stop_event.set()
-        ingestor_thread.join(timeout=12)
-        logger.info("Background thread stopped, exiting.")
-        exit(0)
-        
-    signal.signal(signal.SIGINT, _shutdown)
-    signal.signal(signal.SIGTERM, _shutdown)
     
     app.run(debug=True, use_reloader=False)

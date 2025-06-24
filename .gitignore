@@ -3,3 +3,4 @@ logs/
 data/
 .venv/
 __pycache__/
+response.json
