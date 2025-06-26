@@ -10,6 +10,20 @@ cardStatX is a multi-component system designed to:
 - Provide a web API for accessing card statistics and averages
 - Maintain a continuously updated database of card values
 
+## Showcase
+
+Database Showcase #1
+![image](https://github.com/user-attachments/assets/df5b9eae-6c51-479a-9dbc-f82327a53726)
+
+Database Showcase #2
+![image](https://github.com/user-attachments/assets/9545589f-75e5-467f-bf7f-978f478885a2)
+
+Website API Showcase #1
+![image](https://github.com/user-attachments/assets/a14bc522-21f6-4951-b914-8a431bb46194)
+
+Website API Showcase #2
+![image](https://github.com/user-attachments/assets/c1cd5a4d-3fdf-41d0-9dd8-cf58749e484f)
+
 ## Installation
 
 1. Install required dependencies:
@@ -21,14 +35,21 @@ pip install -r requirements.txt
 ```python
 OAUTH_TOKEN = "your_ebay_oauth_token_here"
 ```
+[But how do I get an OAUTH token??](https://developer.ebay.com/api-docs/static/oauth-tokens.html)
 
-3. Ensure data directory exists:
-```bash
-mkdir -p data logs
+
+3. Run `scraper.py` and wait. It will take up to 20 minutes.
+
+4. Run `ingestor.py` and wait. It could take several hours depending on how much data you want from eBay.
+
+5. Run `web.py` and go wild.
+```
+/api/list - returns a list of every card's id along with it's name
+/api/<card>/stats/average - returns average price in USD of card based on eBay data. comes in week, month, and year.
 ```
 
 ## TODO
-
+I don't know if these will ever happen, pr open!
 - Add more filtering to eBay search results
 - Combine scripts into modules
 - Website Frontend
