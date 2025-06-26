@@ -6,14 +6,13 @@ This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 Int
 """
 
 from logging_setup import setup_logging
+from syncdatabase import SyncCardDatabase  # Use sync version
 from lxml import etree
 import cloudscraper
 import time
 import hashlib
 import logging
-import json
 import bs4
-import os
 
 setup_logging()
 
@@ -52,11 +51,11 @@ def update_catalog():
         releases_blocks = year_dom.xpath('//*[@id="content"]/div[1]/div[2]')
         
         for release_block in releases_blocks:
+            release_name = None
             for element in release_block:
                 if element.tag == "h3":
                     release_name = element.text
-                    pass
-                if element.tag == 'ul':
+                elif element.tag == 'ul' and release_name:
                     for ee in element:
                         if ee.tag == 'li':
                             for e in ee:
@@ -72,21 +71,24 @@ def update_catalog():
                                         year_releases[release_name] = {set_name: set_link}
         
         years[key] = year_releases
-        time.sleep(1) # some reason if we do not add a delay, some years are blank
+        time.sleep(1)  # some reason if we do not add a delay, some years are blank
         
     logger.info(f"Catalog update complete - processed {len(years)} years")
     return years
 
-def update_sets(year_cataloge: dict[str, dict[str, dict[str, str]]]):
+def update_sets(year_catalog: dict[str, dict[str, dict[str, str]]]):
     logger.info("Starting card set update process")
-    cards = {}
+    
+    # Initialize sync database
+    db = SyncCardDatabase()
+    db.initialize()
     
     scraper = cloudscraper.create_scraper()
-    total_years = len(year_cataloge)
+    total_years = len(year_catalog)
     year_count = 0
     total_cards_processed = 0
     
-    for year, releases in year_cataloge.items():
+    for year, releases in year_catalog.items():
         year_count += 1
         logger.info(f"Processing year {year} ({year_count}/{total_years}) - {len(releases)} releases")
         
@@ -97,7 +99,6 @@ def update_sets(year_cataloge: dict[str, dict[str, dict[str, str]]]):
                 
                 set_id = set_link.split("sid/")[1].split("/")[0]
                 printable_link = "/PrintChecklist.cfm?SetID=" + set_id
-                scraper = cloudscraper.create_scraper()
                 doc = scraper.get(BASEURL + printable_link).text
                 soup = bs4.BeautifulSoup(doc, 'html.parser')
                 
@@ -106,7 +107,9 @@ def update_sets(year_cataloge: dict[str, dict[str, dict[str, str]]]):
                     for div in td.find_all('div', recursive=False):
                         card = set_name + " " + div.get_text(strip=True)
                         card_hash = hashlib.md5(card.encode()).hexdigest()
-                        cards.update({card_hash: card})
+                        
+                        # Add card to database
+                        db.add_card(card_hash, card)
                         set_cards += 1
                 
                 year_cards += set_cards
@@ -115,18 +118,14 @@ def update_sets(year_cataloge: dict[str, dict[str, dict[str, str]]]):
         logger.info(f"Completed year {year} - processed {year_cards} cards")
     
     logger.info(f"Card processing complete - total {total_cards_processed} cards processed")
-    logger.info("Saving card data to map.json file")
+    logger.info("Card data saved to database")
     
-    if not os.path.isfile('data/map.json'):
-        with open('data/map.json', 'w', encoding='utf-8') as f:
-            json.dump(cards, f, ensure_ascii=False, indent=4)
-    else:
-        with open('data/map.json', 'r', encoding='utf-8') as f:
-            map: dict = json.load(f)
-            map.update(cards)
-                
-            with open('data/map.json', 'w', encoding='utf-8') as f:
-                json.dump(map, f, ensure_ascii=False, indent=4)
-                
+    return total_cards_processed
+
 if __name__ == "__main__":
-    update_sets(update_catalog())
+    db = SyncCardDatabase()
+    db.initialize()
+    
+    # Run the scraper
+    catalog = update_catalog()
+    update_sets(catalog)

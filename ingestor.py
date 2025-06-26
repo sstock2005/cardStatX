@@ -5,152 +5,153 @@ License: CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
 This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.
 """
 
-from logging_setup import setup_logging
-from typing import Any
-import threading
-import hashlib
+import asyncio
+import aiohttp
 import logging
-import requests
+from typing import Any, Optional
+from database import CardDatabase
 import constants
-import json
-import time
-import os
 
-setup_logging()
+logger = logging.getLogger('async_ingestor')
 
-logger = logging.getLogger('ingestor')
+class AsyncCardIngestor:
+    def __init__(self, db: CardDatabase):
+        self.db = db
+        self.session = None
     
-def search(keyword: str) -> Any | None:
-    url = f"https://api.ebay.com/buy/browse/v1/item_summary/search?q={keyword}&category_ids=261328&limit=200"
-
-    payload = {}
-    headers = {
-    'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
-    'Authorization': f'Bearer {constants.OAUTH_TOKEN}'
-    }
-
-    response = requests.request("GET", url, headers=headers, data=payload)
-
-    with open("response.json", "w") as f:
-        f.write(response.content.decode())
+    async def __aenter__(self):
+        self.session = aiohttp.ClientSession()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            await self.session.close()
+    
+    async def search_ebay(self, keyword: str) -> Optional[dict]:
+        """Search eBay API asynchronously"""
+        url = f"https://api.ebay.com/buy/browse/v1/item_summary/search?q={keyword}&category_ids=261328&limit=200"
         
-    
-    if response.ok:
-        if int(response.json()['total']) == 0:
-            logger.warning(f"[search::warning] {keyword} returned 0 results")
-            
-        return response.json()
-    else:
-        logger.error(f"[search::error] {keyword} search failed")
-        return None
-    
-def filter(data):
-    
-    items = {}
-    
-    if not data:
-        return None
-    
-    if int(data['total']) == 0:
-        return None
-    
-    found_items = data['itemSummaries']
-        
-    for item in found_items:
-        id = item['itemId']
-        title = item['title']
-        
-        # filter out non-standard items
-        if "|0" not in id:
-            logger.warning(f"[filter::warning] skipping non standard item {id}")
-            continue
-        
-        if item['price']['currency'] != 'USD':
-            logger.warning(f"[filter::warning] skipped non USD item {id}")
-            continue
+        headers = {
+            'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+            'Authorization': f'Bearer {constants.OAUTH_TOKEN}'
+        }
         
         try:
-            condition = item['condition'] + ':' + item['conditionId']
-        except KeyError as ke:
-            continue  # skip items without condition information
-            
-        # TODO add more filtering here
-        # item['Set']
-        # item['Card Number']
-        
-        cost = item['price']['value']
-
-        itemCreationDate = item['itemCreationDate']
-        
-        items.update({id: (title, condition, cost, itemCreationDate)})
-        
-    return items
-
-def initialize():
-    if not os.path.isdir('data'):
-        os.mkdir('data')
-
-def iterate(stop_event: threading.Event):
-    initialize()
+            async with self.session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if int(data.get('total', 0)) == 0:
+                        logger.warning(f"Search for '{keyword}' returned 0 results")
+                    return data
+                else:
+                    logger.error(f"eBay search failed for '{keyword}': {response.status}")
+                    return None
+        except Exception as e:
+            logger.error(f"Error searching eBay for '{keyword}': {e}")
+            return None
     
-    while True:
+    def filter_items(self, data: dict) -> Optional[dict]:
+        """Filter eBay search results"""
+        if not data or int(data.get('total', 0)) == 0:
+            return None
         
-        if stop_event.is_set():
-            break
+        items = {}
+        found_items = data.get('itemSummaries', [])
         
-        with open("data/map.json", 'r') as f:
-            cards: dict = json.load(f)
+        for item in found_items:
+            item_id = item['itemId']
+            title = item['title']
             
-        for card in cards.values():
-            current = filter(search(card))
-            
-            name = card
-            card = hashlib.md5(card.encode()).hexdigest()
-            
-            if not current:
+            # Filter out non-standard items
+            if "|0" not in item_id:
                 continue
             
-            if not os.path.isfile('data/' + card + '.json'):
-                with open('data/' + card + '.json', 'w', encoding='utf-8') as f:
-                    json.dump(current, f, ensure_ascii=False, indent=4)
-            else:
-                with open('data/' + card + '.json', 'r', encoding='utf-8') as f:
-                    cached = json.load(f)
-                
-                cached.update(current)
-                
-                with open('data/' + card + '.json', 'w', encoding='utf-8') as f:
-                    json.dump(cached, f, ensure_ascii=False, indent=4)
-                
-            if not os.path.isfile('data/map.json'):
-                with open('data/map.json', 'w', encoding='utf-8') as f:
-                    json.dump({card: name}, f, ensure_ascii=False, indent=4)
-            else:
-                with open('data/map.json', 'r', encoding='utf-8') as f:
-                    map = json.load(f)
-                    
-                map.update({card: name})
-                
-                with open('data/map.json', 'w', encoding='utf-8') as f:
-                    json.dump(map, f, ensure_ascii=False, indent=4)
-                    
-            logger.info(f"[iterate::success] processed {name} ({card})")
+            if item['price']['currency'] != 'USD':
+                continue
             
-            time.sleep(1)
+            try:
+                condition = item['condition'] + ':' + item['conditionId']
+            except KeyError:
+                continue
             
-        logger.info(f"[iterate::success] saved results to data/{card}.json")
+            price = float(item['price']['value'])
+            creation_date = item['itemCreationDate']
+            
+            items[item_id] = (title, condition, price, creation_date)
         
-        time.sleep(10)
+        return items if items else None
+    
+    async def process_card(self, card_id: str, card_name: str) -> int:
+        """Process a single card - search eBay and store results"""
+        try:
+            search_data = await self.search_ebay(card_name)
+            filtered_items = self.filter_items(search_data)
+            
+            if not filtered_items:
+                return 0
+            
+            listings_added = 0
+            for listing_id, (title, condition, price, listing_date) in filtered_items.items():
+                success = await self.db.add_listing(
+                    listing_id, card_id, title, condition, price, listing_date
+                )
+                if success:
+                    listings_added += 1
+            
+            logger.info(f"Processed {card_name} ({card_id}) - added {listings_added} listings")
+            return listings_added
+            
+        except Exception as e:
+            logger.error(f"Error processing card {card_name}: {e}")
+            return 0
+    
+    async def process_all_cards(self, concurrency_limit: int = 5):
+        """Process all cards with controlled concurrency"""
+        cards = await self.db.get_all_cards()
         
+        if not cards:
+            logger.warning("No cards found in database")
+            return
+        
+        logger.info(f"Starting to process {len(cards)} cards with concurrency limit {concurrency_limit}")
+        
+        semaphore = asyncio.Semaphore(concurrency_limit)
+        
+        async def process_with_semaphore(card_id: str, card_name: str):
+            async with semaphore:
+                result = await self.process_card(card_id, card_name)
+                # Add delay to respect rate limits
+                await asyncio.sleep(1)
+                return result
+        
+        tasks = [
+            process_with_semaphore(card_id, card_name) 
+            for card_id, card_name in cards.items()
+        ]
+        
+        total_listings = 0
+        completed = 0
+        
+        for task in asyncio.as_completed(tasks):
+            listings_count = await task
+            total_listings += listings_count
+            completed += 1
+            
+            if completed % 10 == 0:
+                logger.info(f"Progress: {completed}/{len(cards)} cards processed")
+        
+        logger.info(f"Completed processing all cards - total {total_listings} listings added")
+
+async def main():
+    """Main async function"""
+    from logging_setup import setup_logging
+    setup_logging()
+    
+    db = CardDatabase()
+    await db.initialize()
+    
+    async with AsyncCardIngestor(db) as ingestor:
+        await ingestor.process_all_cards(concurrency_limit=3)
+
 if __name__ == "__main__":
-    logger.info("Starting ingestor")
-    
-    stop_event = threading.Event()
-    
-    try:
-        iterate(stop_event)
-    except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received, stopping ingestor")
-        stop_event.set()
-        
-    logger.info("Ingestor stopped")
+    asyncio.run(main())

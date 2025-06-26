@@ -5,39 +5,37 @@ License: CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
 This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.
 """
 
-from logging_setup import setup_logging
-from ingestor import iterate
+from quart import Quart, jsonify
 from util import get_card_list, get_card_averages
-import threading, signal
-from flask import Flask
-import json
+from ingestor import AsyncCardIngestor
+from database import CardDatabase
+import asyncio
 import logging
+from logging_setup import setup_logging
 
-app = Flask('web')
-stop_event = threading.Event()
+app = Quart('cardstatx')
+setup_logging()
+logger = logging.getLogger('web')
 
-def iterate_task():
-    iterate(stop_event)
-    
 @app.route('/')
-def hello():
+async def hello():
     return 'Hello, World!'
 
 @app.route('/api/list')
-def api_list():
-    return get_card_list()
+async def api_list():
+    cards = await get_card_list()
+    if cards is None:
+        return jsonify({"error": "No cards found"}), 404
+    return jsonify(cards)
 
-@app.route('/api/<card>/stats/average')
-def api_stats_average(card: str):
-    averages = get_card_averages(card)
+@app.route('/api/<card_id>/stats/average')
+async def api_stats_average(card_id: str):
+    averages = await get_card_averages(card_id)
     
     if averages is None:
-        return {"error": "Card not found"}, 404
-
-    else:
-        return averages
-if __name__ == '__main__':
-    setup_logging()
-    logger = logging.getLogger('web')
+        return jsonify({"error": "Card not found"}), 404
     
-    app.run(debug=True, use_reloader=False)
+    return jsonify(averages)
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)

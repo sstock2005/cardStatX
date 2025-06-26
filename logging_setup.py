@@ -47,8 +47,25 @@ LOGGING_CONFIG = {
             'filename': 'logs/scraper.log',
             'backupCount': 3,
             'encoding': 'utf-8',
+        },
+        # Handler for async database
+        'database': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'level': 'DEBUG',
+            'formatter': 'standard',
+            'filename': 'logs/database.log',
+            'backupCount': 3,
+            'encoding': 'utf-8',
+        },
+        # Handler for sync database
+        'sync_database': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'level': 'DEBUG',
+            'formatter': 'standard',
+            'filename': 'logs/sync_database.log',
+            'backupCount': 3,
+            'encoding': 'utf-8',
         }
-        # ...
     },
 
     'loggers': {
@@ -67,6 +84,18 @@ LOGGING_CONFIG = {
         # Logger for scraper
         'scraper': {
             'handlers': ['scraper'],
+            'level': 'DEBUG',
+            'propagate': False,   # avoid also sending to root
+        },
+        # Logger for async database
+        'database': {
+            'handlers': ['database'],
+            'level': 'DEBUG',
+            'propagate': False,   # avoid also sending to root
+        },
+        # Logger for sync database
+        'sync_database': {
+            'handlers': ['sync_database'],
             'level': 'DEBUG',
             'propagate': False,   # avoid also sending to root
         }
