@@ -5,8 +5,8 @@ License: CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
 This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.
 """
 
+from syncdatabase import SyncCardDatabase
 from logging_setup import setup_logging
-from syncdatabase import SyncCardDatabase  # Use sync version
 from lxml import etree
 import cloudscraper
 import time
@@ -21,6 +21,8 @@ logger = logging.getLogger('scraper')
 BASEURL = "https://www.tcdb.com"
 
 def update_catalog():
+    """Scrapes sets from tcdb by year"""
+    
     logger.info("Starting catalog update - fetching years from TCDB")
     scraper = cloudscraper.create_scraper()
     html_doc = scraper.get("https://www.tcdb.com/ViewAll.cfm/sp/Football?MODE=Years").text
@@ -77,9 +79,10 @@ def update_catalog():
     return years
 
 def update_sets(year_catalog: dict[str, dict[str, dict[str, str]]]):
+    """Grabs cards from each set for each year"""
+    
     logger.info("Starting card set update process")
     
-    # Initialize sync database
     db = SyncCardDatabase()
     db.initialize()
     
@@ -93,7 +96,7 @@ def update_sets(year_catalog: dict[str, dict[str, dict[str, str]]]):
         logger.info(f"Processing year {year} ({year_count}/{total_years}) - {len(releases)} releases")
         
         year_cards = 0
-        for release_name, sets in releases.items():
+        for _, sets in releases.items():
             
             for set_name, set_link in sets.items():
                 
@@ -107,8 +110,6 @@ def update_sets(year_catalog: dict[str, dict[str, dict[str, str]]]):
                     for div in td.find_all('div', recursive=False):
                         card = set_name + " " + div.get_text(strip=True)
                         card_hash = hashlib.md5(card.encode()).hexdigest()
-                        
-                        # Add card to database
                         db.add_card(card_hash, card)
                         set_cards += 1
                 
@@ -123,9 +124,9 @@ def update_sets(year_catalog: dict[str, dict[str, dict[str, str]]]):
     return total_cards_processed
 
 if __name__ == "__main__":
+    
     db = SyncCardDatabase()
     db.initialize()
     
-    # Run the scraper
     catalog = update_catalog()
     update_sets(catalog)

@@ -5,12 +5,13 @@ License: CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
 This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.
 """
 
+from logging_setup import setup_logging
+from database import CardDatabase
+from typing import Optional
+import constants
 import asyncio
 import aiohttp
 import logging
-from typing import Any, Optional
-from database import CardDatabase
-import constants
 
 logger = logging.getLogger('async_ingestor')
 
@@ -29,6 +30,7 @@ class AsyncCardIngestor:
     
     async def search_ebay(self, keyword: str) -> Optional[dict]:
         """Search eBay API asynchronously"""
+        
         url = f"https://api.ebay.com/buy/browse/v1/item_summary/search?q={keyword}&category_ids=261328&limit=200"
         
         headers = {
@@ -40,18 +42,22 @@ class AsyncCardIngestor:
             async with self.session.get(url, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
+                    
                     if int(data.get('total', 0)) == 0:
                         logger.warning(f"Search for '{keyword}' returned 0 results")
+                        
                     return data
                 else:
                     logger.error(f"eBay search failed for '{keyword}': {response.status}")
                     return None
+                
         except Exception as e:
             logger.error(f"Error searching eBay for '{keyword}': {e}")
             return None
     
     def filter_items(self, data: dict) -> Optional[dict]:
         """Filter eBay search results"""
+        
         if not data or int(data.get('total', 0)) == 0:
             return None
         
@@ -62,7 +68,6 @@ class AsyncCardIngestor:
             item_id = item['itemId']
             title = item['title']
             
-            # Filter out non-standard items
             if "|0" not in item_id:
                 continue
             
@@ -71,6 +76,7 @@ class AsyncCardIngestor:
             
             try:
                 condition = item['condition'] + ':' + item['conditionId']
+                
             except KeyError:
                 continue
             
@@ -83,6 +89,7 @@ class AsyncCardIngestor:
     
     async def process_card(self, card_id: str, card_name: str) -> int:
         """Process a single card - search eBay and store results"""
+        
         try:
             search_data = await self.search_ebay(card_name)
             filtered_items = self.filter_items(search_data)
@@ -107,6 +114,7 @@ class AsyncCardIngestor:
     
     async def process_all_cards(self, concurrency_limit: int = 5):
         """Process all cards with controlled concurrency"""
+        
         cards = await self.db.get_all_cards()
         
         if not cards:
@@ -120,7 +128,6 @@ class AsyncCardIngestor:
         async def process_with_semaphore(card_id: str, card_name: str):
             async with semaphore:
                 result = await self.process_card(card_id, card_name)
-                # Add delay to respect rate limits
                 await asyncio.sleep(1)
                 return result
         
@@ -143,11 +150,11 @@ class AsyncCardIngestor:
         logger.info(f"Completed processing all cards - total {total_listings} listings added")
 
 async def main():
-    """Main async function"""
-    from logging_setup import setup_logging
-    setup_logging()
     
+    setup_logging()
+
     db = CardDatabase()
+    
     await db.initialize()
     
     async with AsyncCardIngestor(db) as ingestor:

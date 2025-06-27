@@ -5,11 +5,10 @@ License: CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
 This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.
 """
 
+from typing import Dict
 import sqlite3
 import logging
 import os
-from typing import Optional, Dict
-from datetime import datetime
 
 logger = logging.getLogger('sync_database')
 
@@ -20,6 +19,7 @@ class SyncCardDatabase:
     
     def initialize(self):
         """Initialize the database with required tables"""
+        
         with sqlite3.connect(self.db_path) as db:
             db.execute("""
                 CREATE TABLE IF NOT EXISTS cards (
@@ -56,6 +56,7 @@ class SyncCardDatabase:
     
     def add_card(self, card_id: str, card_name: str) -> bool:
         """Add a new card or update existing one"""
+        
         try:
             with sqlite3.connect(self.db_path) as db:
                 db.execute("""
@@ -63,14 +64,18 @@ class SyncCardDatabase:
                     VALUES (?, ?, CURRENT_TIMESTAMP)
                 """, (card_id, card_name))
                 db.commit()
+                
                 return True
+            
         except Exception as e:
             logger.error(f"Error adding card {card_id}: {e}")
             return False
     
     def get_all_cards(self) -> Dict[str, str]:
         """Get all cards as a dictionary {id: name}"""
+        
         with sqlite3.connect(self.db_path) as db:
             cursor = db.execute("SELECT id, name FROM cards")
             rows = cursor.fetchall()
+            
             return {row[0]: row[1] for row in rows}

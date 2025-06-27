@@ -10,10 +10,12 @@ from typing import Optional, Dict
 
 async def get_card_list() -> Optional[Dict[str, str]]:
     """Get list of all cards from database"""
+    
     db = CardDatabase()
     return await db.get_all_cards()
 
 async def get_card_averages(card_id: str) -> Optional[Dict[str, float]]:
     """Get price averages for a specific card"""
+    
     db = CardDatabase()
     return await db.get_card_averages(card_id)

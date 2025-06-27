@@ -5,22 +5,24 @@ License: CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
 This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.
 """
 
-import aiosqlite
-import asyncio
-import logging
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict
+from datetime import timedelta
 from datetime import datetime
+import aiosqlite
+import logging
 import os
 
 logger = logging.getLogger('database')
 
 class CardDatabase:
     def __init__(self, db_path: str = "data/cards.db"):
+        
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         
     async def initialize(self):
         """Initialize the database with required tables"""
+        
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS cards (
@@ -57,6 +59,7 @@ class CardDatabase:
     
     async def add_card(self, card_id: str, card_name: str) -> bool:
         """Add a new card or update existing one"""
+        
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute("""
@@ -64,14 +67,16 @@ class CardDatabase:
                     VALUES (?, ?, CURRENT_TIMESTAMP)
                 """, (card_id, card_name))
                 await db.commit()
+                
                 return True
+            
         except Exception as e:
             logger.error(f"Error adding card {card_id}: {e}")
             return False
     
-    async def add_listing(self, listing_id: str, card_id: str, title: str, 
-                         condition: str, price: float, listing_date: str) -> bool:
+    async def add_listing(self, listing_id: str, card_id: str, title: str, condition: str, price: float, listing_date: str) -> bool:
         """Add a new listing"""
+        
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute("""
@@ -80,23 +85,36 @@ class CardDatabase:
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (listing_id, card_id, title, condition, price, listing_date))
                 await db.commit()
+                
                 return True
+            
         except Exception as e:
             logger.error(f"Error adding listing {listing_id}: {e}")
             return False
     
     async def get_all_cards(self) -> Dict[str, str]:
         """Get all cards as a dictionary {id: name}"""
+        
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute("SELECT id, name FROM cards") as cursor:
                 rows = await cursor.fetchall()
+                
                 return {row[0]: row[1] for row in rows}
     
+    async def get_all_listings_card_id(self):
+        """Gets all card listings as a dictionary"""
+        
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT card_id FROM listings") as cursor:
+                rows = await cursor.fetchall()
+                
+                return {row[0]: {row[1], row[2], row[3], row[4], row[5]} for row in rows}
+            
     async def get_card_averages(self, card_id: str) -> Optional[Dict[str, float]]:
         """Calculate price averages for a card over different time periods"""
+        
         try:
             async with aiosqlite.connect(self.db_path) as db:
-                # Get listings from different time periods
                 query = """
                     SELECT price, listing_date 
                     FROM listings 
@@ -111,7 +129,6 @@ class CardDatabase:
                     return None
                 
                 now = datetime.utcnow()
-                from datetime import timedelta
                 
                 cutoff_week = now - timedelta(weeks=1)
                 cutoff_month = now - timedelta(days=30)
